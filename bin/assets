@@ -4,16 +4,29 @@ require 'aws-sdk'
 require 'pry'
 require 'nokogiri'
 require 'open-uri'
+require 'yui/compressor'
+require 'zlib'
 
-asset_base = "http://d28b2b6agst9t9.cloudfront.net"
-#asset_base = "http://chokaigi.s3.amazonaws.com"
+
+@asset_hosts = AWS.cloud_front.client.list_distributions.items.map do |dist|
+  "http://#{dist.domain_name}" if dist.enabled && dist.status == "Deployed" && dist.origins.items.first.id == "S3-chokaigi"
+end.to_a.compact
+
+puts "asset_hosts = #{@asset_hosts.to_s}"
+
+def asset_base
+  host = @asset_hosts.shift
+  @asset_hosts.push host
+  host
+end
 
 html = File.read("public_html/index.html")
-html = html.gsub(/(\.)?\/img\//, "#{asset_base}/images/")
+html = html.gsub(/(\.)?\/img\//){ |match| "#{asset_base}/images/" }
 
 nokogiri = Nokogiri::HTML(html)
 
 bucket = AWS.s3.buckets['chokaigi']
+ts = Time.now.to_i
 
 styles = nokogiri.css("link[rel=stylesheet]")
 css = styles.map do |style|
@@ -21,11 +34,14 @@ css = styles.map do |style|
   if src =~ /http/
     content = open(src).read
   else
-    content = File.read("public_html/#{src}").gsub(/(\.\.)?\/img\//, "#{asset_base}/images/")
+    content = File.read("public_html/#{src}").gsub(/(\.\.)?\/img\//) { "#{asset_base}/images/" }
   end
   content
 end.join("\n")
-bucket.objects['stylesheets/application.css'].write(css, acl: :public_read)
+css_compressor = YUI::CssCompressor.new
+css = css_compressor.compress(css)
+bucket.objects["stylesheets/application-#{ts}.css"].write(css, acl: :public_read, content_type: 'text/css')
+bucket.objects["stylesheets/application-#{ts}.css.gz"].write(Zlib::Deflate.deflate(css, Zlib::BEST_COMPRESSION), acl: :public_read, content_encoding: "gzip", content_type: "text/css")
 
 scripts = nokogiri.css("script[src]")
 js = scripts.map do |script|
@@ -37,7 +53,10 @@ js = scripts.map do |script|
   end
   content
 end.join("\n")
-bucket.objects['javascripts/application.js'].write(js, acl: :public_read)
+js_compressor = YUI::JavaScriptCompressor.new(munge: true)
+js = js_compressor.compress(js)
+bucket.objects["javascripts/application-#{ts}.js"].write(js, acl: :public_read, content_type: "application/javascript")
+bucket.objects["javascripts/application-#{ts}.js.gz"].write(Zlib::Deflate.deflate(js, Zlib::BEST_COMPRESSION), acl: :public_read, content_encoding: "gzip", content_type: "application/javascript")
 
 if ENV['SEND_IMAGE']
   images = Dir.glob("public_html/img/**/*").each do |file|
@@ -52,19 +71,17 @@ end
 
 styles.each_with_index do |style, i|
   if i == 0
-    style[:href] = "#{asset_base}/stylesheets/application.css"
+    style[:href] = "#{asset_base}/stylesheets/application-#{ts}.css"
   else
     style.remove
   end
 end
 scripts.each_with_index do |script, i|
   if i == 0
-    script[:src] = "#{asset_base}/javascripts/application.js"
+    script[:src] = "#{asset_base}/javascripts/application-#{ts}.js"
   else
     script.remove
   end
 end
 
-File.open("gen/index.html", "w") do |file|
-  file.puts nokogiri
-end
+File.write("gen/index.html", nokogiri)
