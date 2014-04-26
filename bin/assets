@@ -20,9 +20,9 @@ css = styles.map do |style|
   if src =~ /http/
     content = open(src).read
   else
-    content = File.read("public_html/#{src}")
+    content = File.read("public_html/#{src}").gsub(/(\.\.)?\/img\//, "#{asset_base}/images/")
   end
-  content.gsub(/(\.\.)?\/img\//, "#{asset_base}/images/")
+  content
 end.join("\n")
 bucket.objects['stylesheets/application.css'].write(css, acl: :public_read)
 
