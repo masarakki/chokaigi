@@ -5,7 +5,8 @@ require 'pry'
 require 'nokogiri'
 require 'open-uri'
 
-asset_base = "https://s3-ap-northeast-1.amazonaws.com/chokaigi"
+asset_base = "http://d28b2b6agst9t9.cloudfront.net"
+#asset_base = "http://chokaigi.s3.amazonaws.com"
 
 html = File.read("public_html/index.html")
 html = html.gsub(/(\.)?\/img\//, "#{asset_base}/images/")
@@ -38,16 +39,16 @@ js = scripts.map do |script|
 end.join("\n")
 bucket.objects['javascripts/application.js'].write(js, acl: :public_read)
 
-=begin
-images = Dir.glob("public_html/img/**/*").each do |file|
-  unless File.directory?(file)
-    filename = file.gsub(/public_html\/img\//, '')
-    obj = bucket.objects["images/#{filename}"]
-    obj.write(file: file, acl: :public_read) unless obj.exists?
-    puts "#{filename} done"
+if ENV['SEND_IMAGE']
+  images = Dir.glob("public_html/img/**/*").each do |file|
+    unless File.directory?(file)
+      filename = file.gsub(/public_html\/img\//, '')
+      obj = bucket.objects["images/#{filename}"]
+      obj.write(file: file, acl: :public_read) unless obj.exists?
+      puts "#{filename} done"
+    end
   end
 end
-=end
 
 styles.each_with_index do |style, i|
   if i == 0
