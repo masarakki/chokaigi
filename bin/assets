@@ -6,11 +6,28 @@ require 'nokogiri'
 require 'open-uri'
 require 'yui/compressor'
 require 'zlib'
-
+require 'h5-min'
 
 @asset_hosts = AWS.cloud_front.client.list_distributions.items.map do |dist|
   "http://#{dist.domain_name}" if dist.enabled && dist.status == "Deployed" && dist.origins.items.first.id == "S3-chokaigi"
 end.to_a.compact
+
+module HTML5
+  @minifier.send(:define_method, :format_attributes) do |attrs, element|
+    return '' if attrs.empty?
+    attrs.map do |name, value|
+      [normalise_name(name), format_attribute_value(value)]
+    end.sort_by do |name, value|
+      name
+    end.map do |name, value|
+      if boolean_attribute?(element, name)
+        name.to_s
+      else
+        "#{name}=#{value}"
+      end
+    end.join(' ').insert(0, ' ')
+  end
+end
 
 puts "asset_hosts = #{@asset_hosts.to_s}"
 
@@ -84,4 +101,4 @@ scripts.each_with_index do |script, i|
   end
 end
 
-File.write("gen/index.html", nokogiri)
+File.write("gen/index.html", HTML5.minify(nokogiri.to_s))
