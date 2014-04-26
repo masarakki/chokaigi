@@ -1,0 +1,69 @@
+#!/usr/bin/env ruby
+
+require 'aws-sdk'
+require 'pry'
+require 'nokogiri'
+require 'open-uri'
+
+asset_base = "https://s3-ap-northeast-1.amazonaws.com/chokaigi"
+
+html = File.read("public_html/index.html")
+html = html.gsub(/(\.)?\/img\//, "#{asset_base}/images/")
+
+nokogiri = Nokogiri::HTML(html)
+
+bucket = AWS.s3.buckets['chokaigi']
+
+styles = nokogiri.css("link[rel=stylesheet]")
+css = styles.map do |style|
+  src = style[:href]
+  if src =~ /http/
+    content = open(src).read
+  else
+    content = File.read("public_html/#{src}")
+  end
+  content.gsub(/(\.\.)?\/img\//, "#{asset_base}/images/")
+end.join("\n")
+bucket.objects['stylesheets/application.css'].write(css, acl: :public_read)
+
+scripts = nokogiri.css("script[src]")
+js = scripts.map do |script|
+  src = script[:src]
+  if src =~ /http/
+    content = open(src).read
+  else
+    content = File.read("public_html/#{src}")
+  end
+  content
+end.join("\n")
+bucket.objects['javascripts/application.js'].write(js, acl: :public_read)
+
+=begin
+images = Dir.glob("public_html/img/**/*").each do |file|
+  unless File.directory?(file)
+    filename = file.gsub(/public_html\/img\//, '')
+    obj = bucket.objects["images/#{filename}"]
+    obj.write(file: file, acl: :public_read) unless obj.exists?
+    puts "#{filename} done"
+  end
+end
+=end
+
+styles.each_with_index do |style, i|
+  if i == 0
+    style[:href] = "#{asset_base}/stylesheets/application.css"
+  else
+    style.remove
+  end
+end
+scripts.each_with_index do |script, i|
+  if i == 0
+    script[:src] = "#{asset_base}/javascripts/application.js"
+  else
+    script.remove
+  end
+end
+
+File.open("gen/index.html", "w") do |file|
+  file.puts nokogiri
+end
