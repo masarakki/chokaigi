@@ -58,7 +58,7 @@ end.join("\n")
 css_compressor = YUI::CssCompressor.new
 css = css_compressor.compress(css)
 bucket.objects["stylesheets/application-#{ts}.css"].write(css, acl: :public_read, content_type: 'text/css')
-bucket.objects["stylesheets/application-#{ts}.css.gz"].write(Zlib::Deflate.deflate(css, Zlib::BEST_COMPRESSION), acl: :public_read, content_encoding: "gzip", content_type: "text/css")
+bucket.objects["stylesheets/application-#{ts}.css.gz"].write(Zlib::Deflate.deflate(css, Zlib::BEST_COMPRESSION), acl: :public_read, content_encoding: "deflate", content_type: "text/css")
 
 scripts = nokogiri.css("script[src]")
 js = scripts.map do |script|
@@ -73,7 +73,7 @@ end.join("\n")
 js_compressor = YUI::JavaScriptCompressor.new(munge: true)
 js = js_compressor.compress(js)
 bucket.objects["javascripts/application-#{ts}.js"].write(js, acl: :public_read, content_type: "application/javascript")
-bucket.objects["javascripts/application-#{ts}.js.gz"].write(Zlib::Deflate.deflate(js, Zlib::BEST_COMPRESSION), acl: :public_read, content_encoding: "gzip", content_type: "application/javascript")
+bucket.objects["javascripts/application-#{ts}.js.gz"].write(Zlib::Deflate.deflate(js, Zlib::BEST_COMPRESSION), acl: :public_read, content_encoding: "deflate", content_type: "application/javascript")
 
 if ENV['SEND_IMAGE']
   images = Dir.glob("public_html/img/**/*").each do |file|
